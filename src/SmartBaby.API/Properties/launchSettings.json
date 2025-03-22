@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "SmartBaby.API": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:55362;http://localhost:55363"
+    }
+  }
+}
