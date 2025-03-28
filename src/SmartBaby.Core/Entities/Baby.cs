@@ -31,6 +31,7 @@ public class Baby
     public virtual ICollection<Feeding> Feedings { get; set; } = new List<Feeding>();
     public virtual ICollection<Crying> Cryings { get; set; } = new List<Crying>();
     public virtual ICollection<Note> Notes { get; set; } = new List<Note>();
+    public virtual ICollection<DailyRoutine> DailyRoutines { get; set; } = new List<DailyRoutine>();
 }
 
 public enum Gender

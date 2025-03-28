@@ -16,6 +16,7 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<Feeding> Feedings { get; set; }
     public DbSet<Crying> Cryings { get; set; }
     public DbSet<Note> Notes { get; set; }
+    public DbSet<DailyRoutine> DailyRoutines { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
