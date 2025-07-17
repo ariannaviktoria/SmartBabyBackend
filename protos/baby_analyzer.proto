@@ -1,0 +1,433 @@
+syntax = "proto3";
+
+package baby_analyzer;
+
+option csharp_namespace = "BabyAnalyzer.Grpc";
+
+// Import google protobuf types for timestamps and empty responses
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// Baby Analyzer gRPC Service
+service BabyAnalyzerService {
+  // Image Analysis
+  rpc AnalyzeImage(ImageAnalysisRequest) returns (ImageAnalysisResponse);
+  rpc AnalyzeImageStream(stream ImageAnalysisRequest) returns (stream ImageAnalysisResponse);
+  
+  // Audio Analysis
+  rpc AnalyzeAudio(AudioAnalysisRequest) returns (AudioAnalysisResponse);
+  rpc AnalyzeAudioStream(stream AudioAnalysisRequest) returns (stream AudioAnalysisResponse);
+  
+  // Video Analysis
+  rpc AnalyzeVideo(VideoAnalysisRequest) returns (VideoAnalysisResponse);
+  rpc AnalyzeVideoStream(stream VideoChunk) returns (stream VideoAnalysisUpdate);
+  
+  // Multimodal Analysis
+  rpc AnalyzeMultimodal(MultimodalAnalysisRequest) returns (MultimodalAnalysisResponse);
+  
+  // Real-time Analysis
+  rpc StartRealtimeAnalysis(RealtimeAnalysisRequest) returns (stream RealtimeAnalysisResponse);
+  
+  // Health and Status
+  rpc GetHealthStatus(google.protobuf.Empty) returns (HealthStatusResponse);
+  rpc GetModelStatus(google.protobuf.Empty) returns (ModelStatusResponse);
+}
+
+// ============================================================================
+// REQUEST MESSAGES
+// ============================================================================
+
+// Image Analysis Request
+message ImageAnalysisRequest {
+  oneof image_data {
+    bytes image_bytes = 1;           // Raw image bytes
+    string image_base64 = 2;         // Base64 encoded image
+    string image_path = 3;           // File path to image
+  }
+  
+  AnalysisOptions options = 4;       // Analysis options
+  string request_id = 5;             // Optional request identifier
+}
+
+// Audio Analysis Request
+message AudioAnalysisRequest {
+  oneof audio_data {
+    bytes audio_bytes = 1;           // Raw audio bytes
+    string audio_base64 = 2;         // Base64 encoded audio
+    string audio_path = 3;           // File path to audio
+  }
+  
+  AudioFormat audio_format = 4;      // Audio format information
+  AnalysisOptions options = 5;       // Analysis options
+  string request_id = 6;             // Optional request identifier
+}
+
+// Video Analysis Request
+message VideoAnalysisRequest {
+  oneof video_data {
+    bytes video_bytes = 1;           // Raw video bytes
+    string video_path = 2;           // File path to video
+  }
+  
+  VideoAnalysisOptions options = 3;  // Video-specific options
+  string request_id = 4;             // Optional request identifier
+}
+
+// Video Chunk for streaming
+message VideoChunk {
+  bytes chunk_data = 1;              // Video chunk data
+  int32 chunk_index = 2;             // Chunk sequence number
+  bool is_last_chunk = 3;            // Indicates last chunk
+  VideoAnalysisOptions options = 4;  // Analysis options
+  string session_id = 5;             // Session identifier for streaming
+}
+
+// Multimodal Analysis Request
+message MultimodalAnalysisRequest {
+  ImageAnalysisRequest image_request = 1;    // Optional image analysis
+  AudioAnalysisRequest audio_request = 2;    // Optional audio analysis
+  AnalysisOptions options = 3;               // Analysis options
+  string request_id = 4;                     // Optional request identifier
+}
+
+// Real-time Analysis Request
+message RealtimeAnalysisRequest {
+  RealtimeSettings settings = 1;     // Real-time settings
+  string session_id = 2;             // Session identifier
+}
+
+// ============================================================================
+// RESPONSE MESSAGES
+// ============================================================================
+
+// Image Analysis Response
+message ImageAnalysisResponse {
+  bool success = 1;                          // Analysis success status
+  string error_message = 2;                  // Error message if failed
+  
+  EmotionAnalysis emotion_analysis = 3;      // Emotion/mood analysis results
+  string request_id = 4;                     // Request identifier
+  google.protobuf.Timestamp timestamp = 5;  // Analysis timestamp
+  AnalysisMetadata metadata = 6;             // Analysis metadata
+}
+
+// Audio Analysis Response
+message AudioAnalysisResponse {
+  bool success = 1;                          // Analysis success status
+  string error_message = 2;                  // Error message if failed
+  
+  CryAnalysis cry_analysis = 3;              // Cry analysis results
+  string request_id = 4;                     // Request identifier
+  google.protobuf.Timestamp timestamp = 5;  // Analysis timestamp
+  AnalysisMetadata metadata = 6;             // Analysis metadata
+}
+
+// Video Analysis Response
+message VideoAnalysisResponse {
+  bool success = 1;                          // Analysis success status
+  string error_message = 2;                  // Error message if failed
+  
+  VideoAnalysisResult analysis_result = 3;  // Complete video analysis
+  string request_id = 4;                     // Request identifier
+  google.protobuf.Timestamp timestamp = 5;  // Analysis timestamp
+  AnalysisMetadata metadata = 6;             // Analysis metadata
+}
+
+// Video Analysis Update (for streaming)
+message VideoAnalysisUpdate {
+  UpdateType update_type = 1;                // Type of update
+  
+  oneof update_data {
+    EmotionAnalysis emotion_update = 2;      // Emotion analysis update
+    CryAnalysis cry_update = 3;              // Cry analysis update
+    FusionAnalysis fusion_update = 4;        // Fusion analysis update
+    VideoProgress progress_update = 5;       // Progress update
+  }
+  
+  string session_id = 6;                     // Session identifier
+  google.protobuf.Timestamp timestamp = 7;  // Update timestamp
+}
+
+// Multimodal Analysis Response
+message MultimodalAnalysisResponse {
+  bool success = 1;                          // Analysis success status
+  string error_message = 2;                  // Error message if failed
+  
+  ImageAnalysisResponse image_response = 3;  // Image analysis results
+  AudioAnalysisResponse audio_response = 4;  // Audio analysis results
+  FusionAnalysis fusion_analysis = 5;        // Combined analysis
+  string request_id = 6;                     // Request identifier
+  google.protobuf.Timestamp timestamp = 7;  // Analysis timestamp
+}
+
+// Real-time Analysis Response
+message RealtimeAnalysisResponse {
+  AnalysisUpdate update = 1;                 // Analysis update
+  string session_id = 2;                     // Session identifier
+  google.protobuf.Timestamp timestamp = 3;  // Update timestamp
+}
+
+// Health Status Response
+message HealthStatusResponse {
+  ServiceHealth overall_health = 1;          // Overall service health
+  repeated ComponentHealth component_health = 2; // Individual component health
+  google.protobuf.Timestamp timestamp = 3;  // Status timestamp
+  string version = 4;                        // Service version
+}
+
+// Model Status Response
+message ModelStatusResponse {
+  repeated ModelInfo models = 1;             // Information about loaded models
+  google.protobuf.Timestamp timestamp = 2;  // Status timestamp
+}
+
+// ============================================================================
+// SUPPORTING MESSAGES
+// ============================================================================
+
+// Analysis Options
+message AnalysisOptions {
+  float confidence_threshold = 1;            // Minimum confidence threshold
+  bool include_debug_info = 2;               // Include debug information
+  repeated string enabled_models = 3;        // Specific models to use
+  map<string, string> custom_parameters = 4; // Custom analysis parameters
+}
+
+// Audio Format
+message AudioFormat {
+  int32 sample_rate = 1;                     // Audio sample rate
+  int32 channels = 2;                        // Number of audio channels
+  AudioEncoding encoding = 3;                // Audio encoding format
+  int32 bit_depth = 4;                       // Audio bit depth
+}
+
+// Video Analysis Options
+message VideoAnalysisOptions {
+  float frame_interval = 1;                  // Interval between frame analysis (seconds)
+  float audio_segment_duration = 2;          // Audio segment duration (seconds)
+  bool save_results = 3;                     // Whether to save results
+  string output_directory = 4;               // Output directory for results
+  bool enable_fusion = 5;                    // Enable audio-visual fusion
+}
+
+// Real-time Settings
+message RealtimeSettings {
+  int32 video_device_id = 1;                 // Video device ID
+  AudioFormat audio_format = 2;              // Audio format settings
+  float frame_analysis_interval = 3;         // Frame analysis interval
+  float audio_analysis_duration = 4;         // Audio analysis duration
+  bool enable_video_display = 5;             // Enable video display
+  bool enable_overlay = 6;                   // Enable analysis overlay
+}
+
+// Emotion Analysis
+message EmotionAnalysis {
+  string detected_mood = 1;                  // Detected baby mood
+  string dominant_emotion = 2;               // Dominant original emotion
+  float confidence = 3;                      // Analysis confidence
+  map<string, float> all_emotions = 4;       // All emotion probabilities
+  string mood_category = 5;                  // Baby-specific mood category
+}
+
+// Cry Analysis
+message CryAnalysis {
+  bool cry_detected = 1;                     // Whether crying was detected
+  string cry_reason = 2;                     // Reason for crying
+  float confidence = 3;                      // Analysis confidence
+  map<string, float> all_predictions = 4;    // All prediction probabilities
+  string model_used = 5;                     // Model used for analysis
+  AudioFeatures audio_features = 6;          // Extracted audio features
+}
+
+// Fusion Analysis
+message FusionAnalysis {
+  string overall_state = 1;                  // Combined assessment
+  AlertLevel alert_level = 2;                // Alert level
+  float confidence = 3;                      // Combined confidence
+  string primary_indicator = 4;              // Primary analysis source
+  repeated string recommendations = 5;        // Recommended actions
+  FusionMethod method_used = 6;              // Fusion method used
+}
+
+// Video Analysis Result
+message VideoAnalysisResult {
+  VideoInfo video_info = 1;                  // Video metadata
+  repeated EmotionAnalysis visual_analysis = 2; // Visual analysis results
+  repeated CryAnalysis audio_analysis = 3;   // Audio analysis results
+  repeated FusionAnalysis fusion_analysis = 4; // Fusion analysis results
+  AnalysisSummary summary = 5;               // Analysis summary
+}
+
+// Video Info
+message VideoInfo {
+  string file_path = 1;                      // Video file path
+  float duration = 2;                        // Video duration (seconds)
+  float fps = 3;                             // Frames per second
+  int32 total_frames = 4;                    // Total number of frames
+  VideoResolution resolution = 5;            // Video resolution
+}
+
+// Video Resolution
+message VideoResolution {
+  int32 width = 1;                           // Video width
+  int32 height = 2;                          // Video height
+}
+
+// Analysis Summary
+message AnalysisSummary {
+  VisualStatistics visual_stats = 1;         // Visual analysis statistics
+  AudioStatistics audio_stats = 2;           // Audio analysis statistics
+  FusionStatistics fusion_stats = 3;         // Fusion analysis statistics
+  repeated string key_findings = 4;          // Key findings
+  string overall_assessment = 5;             // Overall assessment
+}
+
+// Visual Statistics
+message VisualStatistics {
+  int32 total_frames = 1;                    // Total frames analyzed
+  int32 successful_frames = 2;               // Successfully analyzed frames
+  map<string, int32> mood_distribution = 3;  // Mood distribution
+  string most_common_mood = 4;               // Most common mood
+  float average_confidence = 5;              // Average confidence
+}
+
+// Audio Statistics
+message AudioStatistics {
+  int32 total_segments = 1;                  // Total audio segments
+  int32 successful_segments = 2;             // Successfully analyzed segments
+  float cry_percentage = 3;                  // Percentage of crying detected
+  map<string, int32> cry_reason_distribution = 4; // Cry reason distribution
+  string most_common_cry_reason = 5;         // Most common cry reason
+}
+
+// Fusion Statistics
+message FusionStatistics {
+  int32 total_windows = 1;                   // Total fusion windows
+  map<string, int32> alert_distribution = 2; // Alert level distribution
+  float high_alert_percentage = 3;           // High alert percentage
+}
+
+// Audio Features
+message AudioFeatures {
+  float rms_energy = 1;                      // RMS energy
+  float dominant_frequency = 2;              // Dominant frequency
+  repeated float mfcc_features = 3;          // MFCC features
+  float spectral_centroid = 4;               // Spectral centroid
+  float zero_crossing_rate = 5;              // Zero crossing rate
+}
+
+// Analysis Metadata
+message AnalysisMetadata {
+  string analyzer_version = 1;               // Analyzer version
+  float processing_time = 2;                 // Processing time (seconds)
+  string hardware_info = 3;                  // Hardware information
+  repeated string models_used = 4;           // Models used in analysis
+}
+
+// Analysis Update (for real-time)
+message AnalysisUpdate {
+  UpdateType update_type = 1;                // Type of update
+  
+  oneof update_data {
+    EmotionAnalysis emotion_data = 2;        // Emotion analysis data
+    CryAnalysis cry_data = 3;                // Cry analysis data
+    FusionAnalysis fusion_data = 4;          // Fusion analysis data
+    SystemStatus system_status = 5;          // System status update
+  }
+}
+
+// Video Progress
+message VideoProgress {
+  float progress_percentage = 1;             // Analysis progress (0-100)
+  float current_time = 2;                    // Current analysis time
+  string current_phase = 3;                  // Current analysis phase
+  string estimated_remaining_time = 4;       // Estimated remaining time
+}
+
+// Component Health
+message ComponentHealth {
+  string component_name = 1;                 // Component name
+  ServiceHealth health_status = 2;           // Health status
+  string error_message = 3;                  // Error message if unhealthy
+  google.protobuf.Timestamp last_check = 4; // Last health check time
+}
+
+// Model Info
+message ModelInfo {
+  string model_name = 1;                     // Model name
+  string model_type = 2;                     // Model type
+  ModelStatus status = 3;                    // Model status
+  string version = 4;                        // Model version
+  string file_path = 5;                      // Model file path
+  google.protobuf.Timestamp loaded_at = 6;  // Load timestamp
+}
+
+// System Status
+message SystemStatus {
+  float cpu_usage = 1;                       // CPU usage percentage
+  float memory_usage = 2;                    // Memory usage percentage
+  int32 active_sessions = 3;                 // Number of active sessions
+  float uptime_seconds = 4;                  // Service uptime
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+// Update Type
+enum UpdateType {
+  UPDATE_TYPE_UNSPECIFIED = 0;
+  EMOTION_UPDATE = 1;
+  CRY_UPDATE = 2;
+  FUSION_UPDATE = 3;
+  PROGRESS_UPDATE = 4;
+  ERROR_UPDATE = 5;
+  STATUS_UPDATE = 6;
+}
+
+// Audio Encoding
+enum AudioEncoding {
+  AUDIO_ENCODING_UNSPECIFIED = 0;
+  LINEAR_PCM = 1;
+  FLAC = 2;
+  MP3 = 3;
+  WAV = 4;
+  OGG = 5;
+}
+
+// Alert Level
+enum AlertLevel {
+  ALERT_LEVEL_UNSPECIFIED = 0;
+  NORMAL = 1;
+  MEDIUM = 2;
+  HIGH = 3;
+  CRITICAL = 4;
+}
+
+// Fusion Method
+enum FusionMethod {
+  FUSION_METHOD_UNSPECIFIED = 0;
+  TEMPORAL_FUSION = 1;
+  WEIGHTED_FUSION = 2;
+  RULE_BASED_FUSION = 3;
+  ML_FUSION = 4;
+}
+
+// Service Health
+enum ServiceHealth {
+  SERVICE_HEALTH_UNSPECIFIED = 0;
+  HEALTHY = 1;
+  DEGRADED = 2;
+  UNHEALTHY = 3;
+  UNKNOWN = 4;
+}
+
+// Model Status
+enum ModelStatus {
+  MODEL_STATUS_UNSPECIFIED = 0;
+  LOADED = 1;
+  LOADING = 2;
+  FAILED = 3;
+  NOT_FOUND = 4;
+  UNLOADED = 5;
+}
