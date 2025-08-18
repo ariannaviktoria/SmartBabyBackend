@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SmartBaby.Core.DTOs;
 using SmartBaby.Core.Entities;
 using SmartBaby.Core.Interfaces;
+using System.Security.Claims;
 
 namespace SmartBaby.API.Controllers;
 
@@ -67,6 +69,9 @@ public class AuthController : ControllerBase
         if (user == null)
             return NotFound("Felhasználó nem található");
 
+        // Update last login time
+        await _userService.UpdateLastLoginAsync(user.Id);
+
         var token = await _userService.GenerateJwtTokenAsync(user);
         var tokenDto = new TokenDto
         {
@@ -75,5 +80,30 @@ public class AuthController : ControllerBase
         };
 
         return Ok(tokenDto);
+    }
+
+    /// <summary>
+    /// Get current user profile information
+    /// </summary>
+    /// <returns>User profile data</returns>
+    /// <response code="200">Returns user profile</response>
+    /// <response code="401">User not authenticated</response>
+    /// <response code="404">User not found</response>
+    [HttpGet("profile")]
+    [Authorize]
+    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProfile()
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized("User ID not found in token");
+
+        var userProfile = await _userService.GetUserProfileAsync(userId);
+        if (userProfile == null)
+            return NotFound("User not found");
+
+        return Ok(userProfile);
     }
 } 

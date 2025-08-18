@@ -153,13 +153,14 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]))
+            Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"] ?? throw new InvalidOperationException("JWT:Secret configuration is missing")))
     };
 });
 
 // Add Services
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IBabyService, BabyService>();
+builder.Services.AddScoped<IUserAnalyticsService, UserAnalyticsService>();
 
 // Add Baby Analysis Services
 builder.Services.AddScoped<IBabyAnalysisService, BabyAnalysisService>();

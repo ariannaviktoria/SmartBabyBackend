@@ -73,7 +73,7 @@ public class RealtimeSessionService : IRealtimeSessionService
             session.Status = RealtimeSessionStatus.Stopped;
             session.StoppedAt = DateTime.UtcNow;
 
-            _sessionRepository.Update(session);
+            await _sessionRepository.UpdateAsync(session);
             
             _logger.LogInformation("Stopped real-time analysis session {SessionId}", sessionId);
             return true;
@@ -151,7 +151,7 @@ public class RealtimeSessionService : IRealtimeSessionService
                 session.StoppedAt = DateTime.UtcNow;
             }
 
-            _sessionRepository.Update(session);
+            await _sessionRepository.UpdateAsync(session);
             
             _logger.LogInformation("Updated session {SessionId} status from {OldStatus} to {NewStatus}", 
                 sessionId, oldStatus, status);
@@ -193,7 +193,7 @@ public class RealtimeSessionService : IRealtimeSessionService
             // Update session statistics
             session.UpdateCount++;
             session.LastUpdateAt = DateTime.UtcNow;
-            _sessionRepository.Update(session);
+            await _sessionRepository.UpdateAsync(session);
 
             return true;
         }

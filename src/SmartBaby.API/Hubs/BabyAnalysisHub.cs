@@ -71,14 +71,43 @@ public class BabyAnalysisHub : Hub
             // Send session started confirmation
             await Clients.Caller.SendAsync("SessionStarted", new { SessionId = sessionId });
 
-            // Start the real-time analysis and stream updates
-            await foreach (var update in _analysisService.StartRealtimeAnalysisAsync(request))
+            // Update session to starting status
+            await _sessionService.UpdateSessionStatusAsync(sessionId, RealtimeSessionStatus.Starting);
+
+            try
             {
-                // Send updates to all clients in this session group
-                await Clients.Group($"session_{sessionId}").SendAsync("AnalysisUpdate", update);
+                // Start the real-time analysis and stream updates
+                await foreach (var update in _analysisService.StartRealtimeAnalysisAsync(request))
+                {
+                    // Send updates to all clients in this session group
+                    await Clients.Group($"session_{sessionId}").SendAsync("AnalysisUpdate", update);
+                    
+                    // Update session status to active on first update
+                    await _sessionService.UpdateSessionStatusAsync(sessionId, RealtimeSessionStatus.Active);
+                    
+                    // Store the update in database
+                    await _sessionService.AddSessionUpdateAsync(sessionId, update);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during real-time analysis streaming for session {SessionId}", sessionId);
                 
-                // Update session status
-                await _sessionService.UpdateSessionStatusAsync(sessionId, RealtimeSessionStatus.Active);
+                // Update session status to error
+                await _sessionService.UpdateSessionStatusAsync(sessionId, RealtimeSessionStatus.Error);
+                
+                await Clients.Group($"session_{sessionId}").SendAsync("SessionError", new 
+                { 
+                    SessionId = sessionId, 
+                    Error = "Analysis streaming failed",
+                    Details = ex.Message 
+                });
+            }
+            finally
+            {
+                // Ensure session is properly stopped
+                await _sessionService.StopSessionAsync(sessionId);
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"session_{sessionId}");
             }
         }
         catch (Exception ex)
@@ -117,22 +146,33 @@ public class BabyAnalysisHub : Hub
             _logger.LogInformation("Stopping real-time analysis session {SessionId} for user {UserId}", 
                 sessionId, userId);
 
-            // Stop the analysis service
-            await _analysisService.StopRealtimeAnalysisAsync(sessionId);
+            try
+            {
+                // Stop the analysis service
+                await _analysisService.StopRealtimeAnalysisAsync(sessionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error stopping analysis service for session {SessionId}", sessionId);
+                // Continue with cleanup even if stopping the service fails
+            }
 
             // Update session status
-            await _sessionService.UpdateSessionStatusAsync(sessionId, RealtimeSessionStatus.Stopped);
+            await _sessionService.StopSessionAsync(sessionId);
 
             // Remove from SignalR group
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"session_{sessionId}");
 
             // Notify clients that session has stopped
             await Clients.Group($"session_{sessionId}").SendAsync("SessionStopped", new { SessionId = sessionId });
+            await Clients.Caller.SendAsync("SessionStoppedConfirmation", new { SessionId = sessionId });
+            
+            _logger.LogInformation("Successfully stopped real-time analysis session {SessionId}", sessionId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error stopping real-time analysis session {SessionId}", sessionId);
-            await Clients.Caller.SendAsync("Error", "Failed to stop real-time analysis session");
+            await Clients.Caller.SendAsync("Error", $"Failed to stop real-time analysis session: {ex.Message}");
         }
     }
 

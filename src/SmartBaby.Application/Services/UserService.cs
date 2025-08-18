@@ -61,16 +61,17 @@ public class UserService : IUserService
         return await _userManager.CheckPasswordAsync(user, password);
     }
 
-    public async Task<string> GenerateJwtTokenAsync(User user)
+    public Task<string> GenerateJwtTokenAsync(User user)
     {
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id),
-            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
             new Claim(ClaimTypes.Name, user.FullName)
         };
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]));
+        var jwtSecret = _configuration["JWT:Secret"] ?? throw new InvalidOperationException("JWT:Secret configuration is missing");
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
@@ -81,6 +82,29 @@ public class UserService : IUserService
             signingCredentials: creds
         );
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
+    }
+
+    public async Task<UserDto?> GetUserProfileAsync(string id)
+    {
+        var user = await GetUserByIdAsync(id);
+        if (user == null) return null;
+
+        return new UserDto
+        {
+            FullName = user.FullName,
+            Email = user.Email ?? string.Empty,
+            Password = string.Empty // Never return password
+        };
+    }
+
+    public async Task<bool> UpdateLastLoginAsync(string id)
+    {
+        var user = await GetUserByIdAsync(id);
+        if (user == null) return false;
+
+        user.LastLoginAt = DateTime.UtcNow;
+        var result = await _userManager.UpdateAsync(user);
+        return result.Succeeded;
     }
 } 

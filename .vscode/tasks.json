@@ -1,0 +1,132 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build SmartBaby API",
+			"type": "shell",
+			"command": "dotnet build src/SmartBaby.API/SmartBaby.API.csproj",
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "Run SmartBaby API",
+			"type": "shell",
+			"command": "dotnet run --project src/SmartBaby.API/SmartBaby.API.csproj",
+			"group": "test",
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new",
+				"showReuseMessage": true,
+				"clear": false
+			},
+			"dependsOn": "Build SmartBaby API"
+		},
+		{
+			"label": "Watch SmartBaby API",
+			"type": "shell",
+			"command": "dotnet watch run --project src/SmartBaby.API/SmartBaby.API.csproj",
+			"group": "test",
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new",
+				"showReuseMessage": true,
+				"clear": false
+			}
+		},
+		{
+			"label": "Build Console Test Client",
+			"type": "shell",
+			"command": "dotnet build test/SmartBaby.ConsoleTestClient/SmartBaby.ConsoleTestClient.csproj",
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "Run Console Test Client",
+			"type": "shell",
+			"command": "dotnet run --project test/SmartBaby.ConsoleTestClient/SmartBaby.ConsoleTestClient.csproj",
+			"group": "test",
+			"isBackground": false,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new",
+				"showReuseMessage": true,
+				"clear": true
+			},
+			"dependsOn": "Build Console Test Client"
+		},
+		{
+			"label": "Build WinForms Test Client",
+			"type": "shell",
+			"command": "dotnet build test/SmartBaby.WinFormsTestClient/SmartBaby.WinFormsTestClient.csproj",
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$msCompile"
+			]
+		},
+		{
+			"label": "Run WinForms Test Client",
+			"type": "shell",
+			"command": "dotnet run --project test/SmartBaby.WinFormsTestClient/SmartBaby.WinFormsTestClient.csproj",
+			"group": "test",
+			"isBackground": false,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new",
+				"showReuseMessage": true,
+				"clear": true
+			},
+			"dependsOn": "Build WinForms Test Client"
+		},
+		{
+			"label": "Test SignalR (API + Console Client)",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Run SmartBaby API",
+				"Run Console Test Client"
+			],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Test SignalR (API + WinForms Client)",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Run SmartBaby API",
+				"Run WinForms Test Client"
+			],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new"
+			}
+		}
+	]
+}
