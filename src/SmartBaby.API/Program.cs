@@ -167,6 +167,7 @@ builder.Services.AddScoped<IBabyAnalysisService, BabyAnalysisService>();
 builder.Services.AddScoped<IAnalysisHistoryService, AnalysisHistoryService>();
 builder.Services.AddScoped<IRealtimeSessionService, RealtimeSessionService>();
 builder.Services.AddScoped<IPreviewGenerationService, PreviewGenerationService>();
+builder.Services.AddScoped<IAudioConversionService, AudioConversionService>();
 
 // Add generic repository
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));

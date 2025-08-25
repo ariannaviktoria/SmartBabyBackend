@@ -18,14 +18,17 @@ public class BabyAnalysisController : ControllerBase
     private readonly IBabyAnalysisService _analysisService;
     private readonly IBabyService _babyService;
     private readonly ILogger<BabyAnalysisController> _logger;
+    private readonly IAudioConversionService _audioConversionService;
 
     public BabyAnalysisController(
         IBabyAnalysisService analysisService,
         IBabyService babyService,
+        IAudioConversionService audioConversionService,
         ILogger<BabyAnalysisController> logger)
     {
         _analysisService = analysisService;
         _babyService = babyService;
+        _audioConversionService = audioConversionService;
         _logger = logger;
     }
 
@@ -209,11 +212,11 @@ public class BabyAnalysisController : ControllerBase
                 return BadRequest("File size too large. Maximum 50MB allowed.");
             }
 
-            // Validate file type
-            var allowedTypes = new[] { "audio/wav", "audio/wave", "audio/x-wav", "audio/mpeg", "audio/mp3" };
+            // Validate file type (extended list); some will be converted later
+            var allowedTypes = new[] { "audio/wav", "audio/wave", "audio/x-wav", "audio/mpeg", "audio/mp3", "audio/aac", "audio/x-m4a", "audio/m4a", "audio/mp4", "audio/x-caf", "application/octet-stream" };
             if (!allowedTypes.Contains(audioFile.ContentType.ToLower()))
             {
-                return BadRequest("Invalid file type. Only WAV and MP3 files are allowed.");
+                return BadRequest("Invalid file type. Only WAV, MP3, AAC, M4A, CAF files are allowed.");
             }
 
             // Validate baby ownership if BabyId is provided
@@ -233,9 +236,31 @@ public class BabyAnalysisController : ControllerBase
                 audioBytes = memoryStream.ToArray();
             }
 
+            byte[] finalBytes = audioBytes;
+            bool converted = false;
+            try
+            {
+                bool looksWav = audioBytes.Length > 12 && System.Text.Encoding.ASCII.GetString(audioBytes, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(audioBytes, 8, 4) == "WAVE";
+                if (!looksWav || audioFile.ContentType.ToLower() is "audio/aac" or "audio/x-m4a" or "audio/m4a" or "audio/mp4" or "audio/x-caf")
+                {
+                    var convertedBytes = await _audioConversionService.ConvertToPcm16WavAsync(audioBytes);
+                    if (convertedBytes != null)
+                    {
+                        finalBytes = convertedBytes;
+                        converted = true;
+                        sampleRate = 44100;
+                        channels = 1;
+                    }
+                }
+            }
+            catch (Exception convEx)
+            {
+                _logger.LogWarning(convEx, "Audio conversion failed; proceeding with original bytes.");
+            }
+
             var request = new AudioAnalysisRequestDto
             {
-                AudioBytes = audioBytes,
+                AudioBytes = finalBytes,
                 BabyId = babyId,
                 RequestId = Guid.NewGuid().ToString(),
                 AudioFormat = new AudioFormatDto
@@ -250,6 +275,11 @@ public class BabyAnalysisController : ControllerBase
                     ConfidenceThreshold = confidenceThreshold
                 }
             };
+            if (converted)
+            {
+                request.Options ??= new AnalysisOptionsDto();
+                request.Options.CustomParameters["normalized"] = "true";
+            }
 
             var result = await _analysisService.AnalyzeAudioAsync(request);
             return Ok(result);
