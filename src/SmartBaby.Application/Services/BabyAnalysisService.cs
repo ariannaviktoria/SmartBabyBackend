@@ -22,15 +22,18 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
     private readonly BabyAnalyzerService.BabyAnalyzerServiceClient _grpcClient;
     private readonly string _grpcServerAddress;
     private bool _disposed;
+    private readonly IPreviewGenerationService _previewService;
 
     public BabyAnalysisService(
         ILogger<BabyAnalysisService> logger,
         IConfiguration configuration,
-        IAnalysisHistoryService historyService)
+        IAnalysisHistoryService historyService,
+        IPreviewGenerationService previewService)
     {
         _logger = logger;
         _configuration = configuration;
         _historyService = historyService;
+        _previewService = previewService;
         
         _grpcServerAddress = _configuration.GetValue<string>("BabyAnalyzer:GrpcAddress") 
             ?? "http://localhost:50051";
@@ -63,7 +66,19 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
             // Save analysis result if BabyId is provided
             if (request.BabyId.HasValue && response.Success)
             {
-                await SaveAnalysisResultAsync(request.BabyId.Value, "image", response, cancellationToken);
+                // Attach preview (generate from bytes if not provided)
+                var previewBase64 = request.PreviewImageBase64 ?? request.ImageBase64 ?? (request.ImageBytes != null ? Convert.ToBase64String(request.ImageBytes) : null);
+                string? contentType = request.PreviewImageContentType ?? InferImageContentType(previewBase64);
+                if (previewBase64 != null)
+                {
+                    var resized = await _previewService.ResizeImageAsync(previewBase64, contentType, maxWidth: 480, maxHeight: 480, ct: cancellationToken);
+                    if (resized != null)
+                    {
+                        previewBase64 = resized.Base64;
+                        contentType = resized.ContentType;
+                    }
+                }
+                await SaveAnalysisResultInternalAsync(request.BabyId.Value, "image", response, previewBase64, contentType, cancellationToken, request.RequestId);
             }
 
             _logger.LogInformation("Image analysis completed: Success={Success}, Mood={Mood}", 
@@ -133,7 +148,21 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
             // Save analysis result if BabyId is provided
             if (request.BabyId.HasValue && response.Success)
             {
-                await SaveAnalysisResultAsync(request.BabyId.Value, "audio", response, cancellationToken);
+                string? preview = request.PreviewImageBase64;
+                string? contentType = request.PreviewImageContentType;
+                if (preview == null && request.AudioBytes != null)
+                {
+                    var generated = await _previewService.GenerateAudioPreviewAsync(request.AudioBytes, cancellationToken);
+                    if (generated != null)
+                    {
+                        preview = generated.Base64;
+                        contentType = generated.ContentType;
+                    }
+                }
+                if (preview != null)
+                {
+                    await SaveAnalysisResultInternalAsync(request.BabyId.Value, "audio", response, preview, contentType, cancellationToken, request.RequestId);
+                }
             }
 
             _logger.LogInformation("Audio analysis completed: Success={Success}, CryDetected={CryDetected}, Reason={Reason}", 
@@ -200,10 +229,46 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
             var grpcResponse = await _grpcClient.AnalyzeVideoAsync(grpcRequest, cancellationToken: cancellationToken);
             var response = MapFromGrpcVideoResponse(grpcResponse);
 
-            // Save analysis result if BabyId is provided
+            // Save analysis result if BabyId is provided and SaveResults (default true when not specified)
             if (request.BabyId.HasValue && response.Success)
             {
-                await SaveAnalysisResultAsync(request.BabyId.Value, "video", response, cancellationToken);
+                var shouldSave = request.Options?.SaveResults != false; // treat null as true
+                if (!shouldSave)
+                {
+                    _logger.LogDebug("Video analysis result not saved because SaveResults=false (RequestId={RequestId})", response.RequestId);
+                }
+                else
+                {
+                    string? preview = request.PreviewImageBase64;
+                    string? contentType = request.PreviewImageContentType ?? InferImageContentType(preview);
+
+                    if (preview == null && request.VideoBytes != null)
+                    {
+                        try
+                        {
+                            var generated = await _previewService.GenerateVideoPreviewAsync(request.VideoBytes, cancellationToken);
+                            if (generated != null)
+                            {
+                                preview = generated.Base64;
+                                contentType = generated.ContentType;
+                            }
+                            else
+                            {
+                                _logger.LogInformation("No video preview generated (possibly missing FFmpeg). Saving without preview. RequestId={RequestId}", response.RequestId);
+                            }
+                        }
+                        catch (Exception genEx)
+                        {
+                            _logger.LogWarning(genEx, "Error generating video preview. Proceeding to save analysis without preview. RequestId={RequestId}", response.RequestId);
+                        }
+                    }
+
+                    var saved = await SaveAnalysisResultInternalAsync(request.BabyId.Value, "video", response, preview, contentType, cancellationToken, request.RequestId);
+                    if (!saved)
+                    {
+                        _logger.LogWarning("Failed to persist video analysis result (RequestId={RequestId})", response.RequestId);
+                    }
+                }
             }
 
             _logger.LogInformation("Video analysis completed: Success={Success}, Duration={Duration}s", 
@@ -252,7 +317,22 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
             // Save analysis result if BabyId is provided
             if (request.BabyId.HasValue && response.Success)
             {
-                await SaveAnalysisResultAsync(request.BabyId.Value, "multimodal", response, cancellationToken);
+                string? preview = request.PreviewImageBase64 
+                               ?? request.ImageRequest?.PreviewImageBase64 
+                               ?? request.ImageRequest?.ImageBase64;
+                string? contentType = request.PreviewImageContentType 
+                                  ?? request.ImageRequest?.PreviewImageContentType 
+                                  ?? InferImageContentType(preview);
+                if (preview != null)
+                {
+                    var resized = await _previewService.ResizeImageAsync(preview, contentType, 480, 480, ct: cancellationToken);
+                    if (resized != null)
+                    {
+                        preview = resized.Base64;
+                        contentType = resized.ContentType;
+                    }
+                }
+                await SaveAnalysisResultInternalAsync(request.BabyId.Value, "multimodal", response, preview, contentType, cancellationToken, request.RequestId);
             }
 
             _logger.LogInformation("Multimodal analysis completed: Success={Success}", response.Success);
@@ -296,19 +376,19 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
         }
     }
 
-    public async Task<bool> StopRealtimeAnalysisAsync(string sessionId, CancellationToken cancellationToken = default)
+    public Task<bool> StopRealtimeAnalysisAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         try
         {
             // The gRPC service handles session stopping automatically when the stream is cancelled
             // Additional cleanup logic can be added here
             _logger.LogInformation("Stopping real-time analysis session: {SessionId}", sessionId);
-            return true;
+            return Task.FromResult(true);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error stopping real-time analysis session: {SessionId}", sessionId);
-            return false;
+            return Task.FromResult(false);
         }
     }
 
@@ -378,7 +458,8 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
                 Success = GetAnalysisSuccess(analysisResult),
                 ResultData = JsonSerializer.Serialize(analysisResult),
                 Confidence = GetAnalysisConfidence(analysisResult),
-                PrimaryResult = GetPrimaryResult(analysisResult)
+                PrimaryResult = GetPrimaryResult(analysisResult),
+                RequestId = GetAnalysisRequestId(analysisResult) ?? string.Empty
             };
 
             await _historyService.SaveAnalysisAsync(analysisHistory, cancellationToken);
@@ -387,6 +468,34 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error saving analysis result for baby {BabyId}", babyId);
+            return false;
+        }
+    }
+
+    private async Task<bool> SaveAnalysisResultInternalAsync(int babyId, string analysisType, object analysisResult, string? previewBase64, string? previewContentType, CancellationToken cancellationToken, string? requestId = null)
+    {
+        try
+        {
+            var analysisHistory = new AnalysisHistoryDto
+            {
+                BabyId = babyId,
+                AnalysisType = analysisType,
+                CreatedAt = DateTime.UtcNow,
+                Success = GetAnalysisSuccess(analysisResult),
+                ResultData = JsonSerializer.Serialize(analysisResult),
+                Confidence = GetAnalysisConfidence(analysisResult),
+                PrimaryResult = GetPrimaryResult(analysisResult),
+                RequestId = requestId ?? GetAnalysisRequestId(analysisResult) ?? string.Empty,
+                PreviewImageBase64 = CleanBase64(previewBase64),
+                PreviewImageContentType = previewContentType
+            };
+
+            await _historyService.SaveAnalysisAsync(analysisHistory, cancellationToken);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving analysis result (internal) for baby {BabyId}", babyId);
             return false;
         }
     }
@@ -417,11 +526,11 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
 
     #region Batch Analysis
 
-    public async Task<BatchAnalysisResponseDto> SubmitBatchAnalysisAsync(BatchAnalysisRequestDto request, CancellationToken cancellationToken = default)
+    public Task<BatchAnalysisResponseDto> SubmitBatchAnalysisAsync(BatchAnalysisRequestDto request, CancellationToken cancellationToken = default)
     {
         // This would be implemented to handle batch processing
         // For now, return a placeholder response
-        return new BatchAnalysisResponseDto
+        return Task.FromResult(new BatchAnalysisResponseDto
         {
             BatchId = request.BatchId,
             Success = true,
@@ -429,14 +538,14 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
             CreatedAt = DateTime.UtcNow,
             TotalItems = request.AnalysisItems.Count,
             ProcessedItems = 0
-        };
+        });
     }
 
-    public async Task<BatchAnalysisStatusDto> GetBatchAnalysisStatusAsync(string batchId, CancellationToken cancellationToken = default)
+    public Task<BatchAnalysisStatusDto> GetBatchAnalysisStatusAsync(string batchId, CancellationToken cancellationToken = default)
     {
         // This would query the batch analysis status from the database
         // For now, return a placeholder response
-        return new BatchAnalysisStatusDto
+        return Task.FromResult(new BatchAnalysisStatusDto
         {
             BatchId = batchId,
             Status = SmartBaby.Core.DTOs.BatchAnalysisStatus.Processing,
@@ -447,7 +556,7 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
             ProgressPercentage = 0,
             CreatedAt = DateTime.UtcNow,
             Results = new List<AnalysisItemResultDto>()
-        };
+        });
     }
 
     #endregion
@@ -504,6 +613,18 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
         };
     }
 
+    private static string? GetAnalysisRequestId(object analysisResult)
+    {
+        return analysisResult switch
+        {
+            ImageAnalysisResponseDto image => image.RequestId,
+            AudioAnalysisResponseDto audio => audio.RequestId,
+            VideoAnalysisResponseDto video => video.RequestId,
+            MultimodalAnalysisResponseDto multi => multi.RequestId,
+            _ => null
+        };
+    }
+
     private static ImageAnalysisResponseDto CreateErrorImageResponse(string? requestId, string errorMessage)
     {
         return new ImageAnalysisResponseDto
@@ -546,6 +667,39 @@ public class BabyAnalysisService : IBabyAnalysisService, IDisposable
             RequestId = requestId,
             Timestamp = DateTime.UtcNow
         };
+    }
+
+    private static string? CleanBase64(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        var commaIdx = input.IndexOf(',');
+        if (input.StartsWith("data:") && commaIdx > -1)
+        {
+            return input[(commaIdx + 1)..];
+        }
+        return input.Trim();
+    }
+
+    private static string? InferImageContentType(string? base64)
+    {
+        if (string.IsNullOrWhiteSpace(base64)) return null;
+        // Basic magic number inspection (after cleaning potential data URI)
+        var data = CleanBase64(base64);
+        try
+        {
+            var bytes = Convert.FromBase64String(data!);
+            if (bytes.Length >= 4)
+            {
+                // PNG
+                if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return "image/png";
+                // JPEG
+                if (bytes[0] == 0xFF && bytes[1] == 0xD8) return "image/jpeg";
+                // GIF
+                if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) return "image/gif";
+            }
+        }
+        catch { }
+        return "image/png"; // default
     }
 
     #endregion

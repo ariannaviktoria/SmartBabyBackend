@@ -47,8 +47,16 @@ public class AnalysisHistoryService : IAnalysisHistoryService
                 ResultData = analysis.ResultData,
                 Confidence = analysis.Confidence,
                 PrimaryResult = analysis.PrimaryResult,
-                Metadata = JsonSerializer.Serialize(analysis.Metadata)
+                Metadata = JsonSerializer.Serialize(analysis.Metadata),
+                PreviewImage = !string.IsNullOrEmpty(analysis.PreviewImageBase64) ? Convert.FromBase64String(analysis.PreviewImageBase64) : null,
+                PreviewImageContentType = analysis.PreviewImageContentType
             };
+
+            // Ensure RequestId is set (can't assign twice in object initializer)
+            if (string.IsNullOrWhiteSpace(entity.RequestId))
+            {
+                entity.RequestId = Guid.NewGuid().ToString();
+            }
 
             await _analysisRepository.AddAsync(entity);
             var saved = entity;
@@ -468,7 +476,9 @@ public class AnalysisHistoryService : IAnalysisHistoryService
             ResultData = entity.ResultData,
             Confidence = entity.Confidence,
             PrimaryResult = entity.PrimaryResult,
-            Metadata = metadata
+            Metadata = metadata,
+            PreviewImageBase64 = entity.PreviewImage != null ? Convert.ToBase64String(entity.PreviewImage) : null,
+            PreviewImageContentType = entity.PreviewImageContentType
         };
     }
 }

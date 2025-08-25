@@ -11,6 +11,9 @@ public class ImageAnalysisRequestDto
     public AnalysisOptionsDto? Options { get; set; }
     public string? RequestId { get; set; }
     public int? BabyId { get; set; }
+    // Optional preview override (if different from main image) as base64 data URI or raw base64
+    public string? PreviewImageBase64 { get; set; }
+    public string? PreviewImageContentType { get; set; }
 }
 
 public class AudioAnalysisRequestDto
@@ -22,6 +25,9 @@ public class AudioAnalysisRequestDto
     public AnalysisOptionsDto? Options { get; set; }
     public string? RequestId { get; set; }
     public int? BabyId { get; set; }
+    // Optionally a generated spectrogram/waveform preview
+    public string? PreviewImageBase64 { get; set; }
+    public string? PreviewImageContentType { get; set; }
 }
 
 public class VideoAnalysisRequestDto
@@ -31,6 +37,9 @@ public class VideoAnalysisRequestDto
     public VideoAnalysisOptionsDto? Options { get; set; }
     public string? RequestId { get; set; }
     public int? BabyId { get; set; }
+    // Optional thumbnail extracted client-side to save a DB roundtrip for frame extraction
+    public string? PreviewImageBase64 { get; set; }
+    public string? PreviewImageContentType { get; set; }
 }
 
 public class MultimodalAnalysisRequestDto
@@ -40,6 +49,9 @@ public class MultimodalAnalysisRequestDto
     public AnalysisOptionsDto? Options { get; set; }
     public string? RequestId { get; set; }
     public int? BabyId { get; set; }
+    // Direct preview if caller wants to specify (falls back to ImageRequest.PreviewImageBase64)
+    public string? PreviewImageBase64 { get; set; }
+    public string? PreviewImageContentType { get; set; }
 }
 
 public class RealtimeAnalysisRequestDto

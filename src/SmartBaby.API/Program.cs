@@ -166,6 +166,7 @@ builder.Services.AddScoped<IUserAnalyticsService, UserAnalyticsService>();
 builder.Services.AddScoped<IBabyAnalysisService, BabyAnalysisService>();
 builder.Services.AddScoped<IAnalysisHistoryService, AnalysisHistoryService>();
 builder.Services.AddScoped<IRealtimeSessionService, RealtimeSessionService>();
+builder.Services.AddScoped<IPreviewGenerationService, PreviewGenerationService>();
 
 // Add generic repository
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));

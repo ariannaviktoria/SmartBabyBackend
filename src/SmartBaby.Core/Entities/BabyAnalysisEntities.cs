@@ -61,6 +61,16 @@ public class BabyAnalysis
     [MaxLength(100)]
     public string? FileChecksum { get; set; }
 
+    // Preview image (thumbnail) for quick recognition of the analysis entry
+    // For image & multimodal we store the submitted image (possibly resized upstream)
+    // For video we may later extract a representative frame (currently optional)
+    // For audio we may later store a generated waveform/spectrogram image
+    [Column(TypeName = "bytea")]
+    public byte[]? PreviewImage { get; set; }
+
+    [MaxLength(100)]
+    public string? PreviewImageContentType { get; set; }
+
     // Navigation properties
     public virtual Baby Baby { get; set; } = null!;
     public virtual ICollection<AnalysisTag> Tags { get; set; } = new List<AnalysisTag>();

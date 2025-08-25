@@ -81,6 +81,9 @@ public class AnalysisHistoryDto
     public float? Confidence { get; set; }
     public string? PrimaryResult { get; set; }
     public Dictionary<string, object> Metadata { get; set; } = new();
+    // Base64 encoded preview image (small thumbnail) for quick UI display
+    public string? PreviewImageBase64 { get; set; }
+    public string? PreviewImageContentType { get; set; }
 }
 
 public class AnalysisHistoryFilter

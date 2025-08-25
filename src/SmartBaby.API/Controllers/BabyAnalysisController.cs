@@ -126,7 +126,9 @@ public class BabyAnalysisController : ControllerBase
                 {
                     ConfidenceThreshold = confidenceThreshold,
                     IncludeDebugInfo = includeDebugInfo
-                }
+                },
+                PreviewImageBase64 = Convert.ToBase64String(imageBytes),
+                PreviewImageContentType = imageFile.ContentType
             };
 
             var result = await _analysisService.AnalyzeImageAsync(request);
@@ -313,8 +315,8 @@ public class BabyAnalysisController : ControllerBase
         [FromForm] int? babyId,
         [FromForm] float frameInterval = 1.0f,
         [FromForm] float audioSegmentDuration = 2.0f,
-        [FromForm] bool enableFusion = true,
-        [FromForm] bool saveResults = false)
+    [FromForm] bool enableFusion = true,
+    [FromForm] bool saveResults = true)
     {
         try
         {
@@ -364,7 +366,8 @@ public class BabyAnalysisController : ControllerBase
                     AudioSegmentDuration = audioSegmentDuration,
                     EnableFusion = enableFusion,
                     SaveResults = saveResults
-                }
+                },
+                // TODO: Optionally extract a thumbnail frame server-side; for now client doesn't send it
             };
 
             var result = await _analysisService.AnalyzeVideoAsync(request);
